@@ -24,6 +24,7 @@ $(function () {
                 title: "password",
                 text: "Enter todoist Password",
                 type: "input",
+                inputType: "password",
                 showCancelButton: true,
                 closeOnConfirm: false,
                 animation: "slide-from-top",
@@ -43,20 +44,11 @@ $(function () {
                             alert("failed reriving data")
                             return;
                         }
-                        var write = confirm("Write in Memory? (downloadJs on reject)");
-                        if (write) {
+                        console.log(JSON.stringify(JSON.parse(data)))
                             convert(JSON.stringify(JSON.parse(data)), function (a) {
                                 swal(a)
                             })
-                        } else {
-                            var downloadLink = document.createElement('a');
-                            downloadLink.setAttribute('href', 'data:application/json;charset=utf-8,' + encodeURIComponent(data));
-                            downloadLink.setAttribute('download', 'todoist.json');
-                            document.body.appendChild(downloadLink);
-                            downloadLink.click();
-                            document.body.removeChild(downloadLink);
-                            $('#history-item-langs a')[1].click();
-                        }
+                        
                     })
                 });
                 return true;

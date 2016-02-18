@@ -16,58 +16,6 @@ class Convert:
             client_instace.set_system_identifier(sc_node, sc_idtf)
         return sc_node
 
-    def create_multirelation(self, current_sc_addr, sc_addr, key, value):
-        relation_element = self.tezt.create_node(
-            ScElementType.sc_type_node | ScElementType.sc_type_node_norole | ScElementType.sc_type_const)
-        self.tezt.set_system_identifier(relation_element, str(key) + '-' + self.servise_name + '*')
-        for child_value in value:
-            if isinstance(child_value, dict):
-                self.create_graph_from_json(child_value, current_sc_addr)
-            elif isinstance(child_value, list):
-                self.create_multirelation(relation_element, current_sc_addr, key, child_value)
-            else:
-                value_node_sc_addr = self.tezt.create_node(ScElementType.sc_type_node | ScElementType.sc_type_const)
-                self.tezt.set_system_identifier(value_node_sc_addr, str(child_value))
-                value_arc_sc_addr = self.tezt.create_arc(
-                    ScElementType.sc_type_const | ScElementType.sc_type_edge_common,
-                    sc_addr,
-                    value_node_sc_addr)
-                self.tezt.create_arc(ScElementType.sc_type_arc_pos_const_perm,
-                                     relation_element,
-                                     value_arc_sc_addr)
-
-    def create_graph_from_json(self, kwargs, sc_addr):
-        for key, value in kwargs.iteritems():
-            current_sc_addr = self.tezt.create_node(
-                ScElementType.sc_type_node | ScElementType.sc_type_node_norole | ScElementType.sc_type_const)
-            self.tezt.set_system_identifier(current_sc_addr, str(key) + '-' + self.servise_name + '*')
-
-            if isinstance(value, dict):
-                node_cur = self.tezt.create_node(ScElementType.sc_type_node | ScElementType.sc_type_const)
-                value_arc_sc_addr = self.tezt.create_arc(
-                    ScElementType.sc_type_const | ScElementType.sc_type_edge_common,
-                    sc_addr,
-                    node_cur)
-                self.tezt.create_arc(ScElementType.sc_type_arc_pos_const_perm, current_sc_addr, value_arc_sc_addr)
-                self.create_graph_from_json(value, node_cur)
-            elif isinstance(value, list):
-                node_cur = self.tezt.create_node(ScElementType.sc_type_node | ScElementType.sc_type_const)
-                value_arc_sc_addr = self.tezt.create_arc(
-                    ScElementType.sc_type_const | ScElementType.sc_type_edge_common,
-                    sc_addr,
-                    node_cur)
-                self.tezt.create_arc(ScElementType.sc_type_arc_pos_const_perm, current_sc_addr, value_arc_sc_addr)
-                self.create_multirelation(current_sc_addr, node_cur, key, value)
-            else:
-                if isinstance(value, unicode):
-                    value = value.encode('utf-8')
-                value_node_sc_addr = self.tezt.create_node(ScElementType.sc_type_node | ScElementType.sc_type_const)
-                self.tezt.set_system_identifier(value_node_sc_addr, str(value))
-                value_arc_sc_addr = self.tezt.create_arc(
-                    ScElementType.sc_type_const | ScElementType.sc_type_edge_common,
-                    sc_addr,
-                    value_node_sc_addr)
-                self.tezt.create_arc(ScElementType.sc_type_arc_pos_const_perm, current_sc_addr, value_arc_sc_addr)
 
     def c(self, service_name, data):
         print service_name
@@ -76,7 +24,6 @@ class Convert:
         self.data = data
         self.tezt.initialize('127.0.0.1', 55770)
         aseet = json.loads(data)
-        print aseet
         user = self.get_or_create_sc_node(
             ScElementType.sc_type_node | ScElementType.sc_type_node_norole | ScElementType.sc_type_const, 'user',
             self.tezt)
@@ -95,6 +42,201 @@ class Convert:
                                              self.tezt.create_arc(
                                                  ScElementType.sc_type_const | ScElementType.sc_type_edge_common,
                                                  root_sc_addr, node))
-        self.create_graph_from_json(aseet, node)
+
+        if service_name == 'google-tasks':
+            task_s = self.get_or_create_sc_node(ScElementType.sc_type_node | ScElementType.sc_type_const,'Task lists', self.tezt)
+            self.tezt.create_arc(ScElementType.sc_type_arc_pos_const_perm, node, task_s)
+            self.create_google_tasks(task_s, aseet)
+        if service_name == 'todoist':
+            task_s = self.get_or_create_sc_node(ScElementType.sc_type_node | ScElementType.sc_type_const,'Task lists', self.tezt)
+            self.tezt.create_arc(ScElementType.sc_type_arc_pos_const_perm, node, task_s)
+            self.create_todoist(task_s, aseet)
+        if service_name == 'facebook':
+            self.create_facebook(node, aseet)
+        else:
+            pass
 
         self.tezt.shutdown()
+
+    def make_str(self, value):
+        if isinstance(value, unicode):
+            value = value.encode('utf-8')
+        if isinstance(value, int):
+            value = str(value)
+        return value
+
+    def create_relation_from(self, node, value, name_rel):
+        task_id_relation = self.get_or_create_sc_node(ScElementType.sc_type_node | ScElementType.sc_type_node_norole | ScElementType.sc_type_const,
+                                                 name_rel, self.tezt)
+        task_id = self.get_or_create_sc_node(ScElementType.sc_type_node | ScElementType.sc_type_const,
+                                             value, self.tezt)
+        relation_edge = self.tezt.create_arc(ScElementType.sc_type_arc_pos_const_perm, task_id_relation,
+                                         self.tezt.create_arc(
+                                             ScElementType.sc_type_const | ScElementType.sc_type_edge_common,
+                                             node, task_id))
+
+    def create_relation_to(self, node, value, name_rel):
+        task_id_relation = self.get_or_create_sc_node(ScElementType.sc_type_node | ScElementType.sc_type_node_norole | ScElementType.sc_type_const,
+                                                 name_rel, self.tezt)
+        task_id = self.get_or_create_sc_node(ScElementType.sc_type_node | ScElementType.sc_type_const,
+                                             value, self.tezt)
+        relation_edge = self.tezt.create_arc(ScElementType.sc_type_arc_pos_const_perm, task_id_relation,
+                                         self.tezt.create_arc(
+                                             ScElementType.sc_type_const | ScElementType.sc_type_edge_common,
+                                             task_id, node))
+
+    def create_facebook(self, node, values):
+        value = values['name']
+        if value:
+            value = self.make_str(value)
+            self.create_relation_from(node, value, 'nrel_service_user_name')
+        value = values['first_name']
+        if value:
+            value = self.make_str(value)
+            self.create_relation_from(node, value, 'nrel_service_user_first_name')
+        value = values['last_name']
+        if value:
+            value = self.make_str(value)
+            self.create_relation_from(node, value, 'nrel_service_user_last_name')
+        value = values['updated_time']
+        if value:
+            value = self.make_str(value)
+            self.create_relation_from(node, value, 'nrel_service_user_last_update')
+        value = values['link']
+        if value:
+            value = self.make_str(value)
+            self.create_relation_from(node, value, 'nrel_service_user_link')
+        value = values['id']
+        if value:
+            value = self.make_str(value)
+            self.create_relation_from(node, value, 'nrel_service_user_id')
+
+
+    def create_google_tasks(self, node, values):
+        taskLists = self.get_or_create_sc_node(ScElementType.sc_type_node | ScElementType.sc_type_const, 'Google task lists', self.tezt)
+        self.tezt.create_arc(ScElementType.sc_type_arc_pos_const_perm, node, taskLists)
+        for task_list in values['taskLists']:
+            value=task_list['title']
+            if isinstance(value, unicode):
+                    value = value.encode('utf-8')
+            t_list = self.get_or_create_sc_node(ScElementType.sc_type_node | ScElementType.sc_type_const, value.encode('utf-8'), self.tezt)
+            self.tezt.create_arc(ScElementType.sc_type_arc_pos_const_perm, taskLists, t_list)
+            value=task_list['id']
+            if isinstance(value, unicode):
+                    value = value.encode('utf-8')
+            task_id_relation = self.get_or_create_sc_node(ScElementType.sc_type_node | ScElementType.sc_type_node_norole | ScElementType.sc_type_const,
+                                                 'google-tasklist_id*', self.tezt)
+            task_id = self.get_or_create_sc_node(ScElementType.sc_type_node | ScElementType.sc_type_const,
+                                                 value.encode('utf-8'), self.tezt)
+            relation_edge = self.tezt.create_arc(ScElementType.sc_type_arc_pos_const_perm, task_id_relation,
+                                             self.tezt.create_arc(
+                                                 ScElementType.sc_type_const | ScElementType.sc_type_edge_common,
+                                                 t_list, task_id))
+            value=task_list['selfLink']
+            if isinstance(value, unicode):
+                    value = value.encode('utf-8')
+            task_id_relation = self.get_or_create_sc_node(ScElementType.sc_type_node | ScElementType.sc_type_node_norole | ScElementType.sc_type_const,
+                                                 'google-tasklist_link*', self.tezt)
+            task_id = self.get_or_create_sc_node(ScElementType.sc_type_node | ScElementType.sc_type_const,
+                                                 value.encode('utf-8'), self.tezt)
+            relation_edge = self.tezt.create_arc(ScElementType.sc_type_arc_pos_const_perm, task_id_relation,
+                                             self.tezt.create_arc(
+                                                 ScElementType.sc_type_const | ScElementType.sc_type_edge_common,
+                                                 t_list, task_id))
+
+    def create_todoist(self, node, values):
+        tasks = values['Items']
+        projects = values['Projects']
+        user = values['User']
+        taskLists = self.get_or_create_sc_node(ScElementType.sc_type_node | ScElementType.sc_type_const, 'Todoist task lists', self.tezt)
+        self.tezt.create_arc(ScElementType.sc_type_arc_pos_const_perm, node, taskLists)
+        for project in projects:
+            value=project['name']
+            if isinstance(value, unicode):
+                    value = value.encode('utf-8')
+            t_list = self.get_or_create_sc_node(ScElementType.sc_type_node | ScElementType.sc_type_const, value, self.tezt)
+            self.tezt.create_arc(ScElementType.sc_type_arc_pos_const_perm, taskLists, t_list)
+            value = project['id']
+            value = self.make_str(value)
+            task_id_relation = self.get_or_create_sc_node(ScElementType.sc_type_node | ScElementType.sc_type_node_norole | ScElementType.sc_type_const,
+                                                 'todoist project id*', self.tezt)
+            task_id = self.get_or_create_sc_node(ScElementType.sc_type_node | ScElementType.sc_type_const,
+                                                 value, self.tezt)
+            relation_edge = self.tezt.create_arc(ScElementType.sc_type_arc_pos_const_perm, task_id_relation,
+                                             self.tezt.create_arc(
+                                                 ScElementType.sc_type_const | ScElementType.sc_type_edge_common,
+                                                 t_list, task_id))
+
+        for task in tasks:
+            value = task['content']
+            value = self.make_str(value)
+            task_system = self.tezt.find_element_by_system_identifier("task")
+            task_node = self.get_or_create_sc_node(ScElementType.sc_type_node | ScElementType.sc_type_const, value, self.tezt)
+            task_project = [project for project in projects if project['id']==task['project_id']]
+            task_project_node = self.tezt.find_element_by_system_identifier(self.make_str(task_project[0]['name']))
+            self.tezt.create_arc(ScElementType.sc_type_arc_pos_const_perm, task_system, task_node)
+            inclusion = self.tezt.find_element_by_system_identifier('nrel_inclusion')
+            self.tezt.create_arc(ScElementType.sc_type_arc_pos_const_perm, inclusion,
+                                             self.tezt.create_arc(
+                                                 ScElementType.sc_type_const | ScElementType.sc_type_edge_common,
+                                                 task_project_node, task_node))
+            value = task['due_date']
+            if value:
+                value = self.make_str(value)
+                task_finish_date_relation = self.get_or_create_sc_node(ScElementType.sc_type_node | ScElementType.sc_type_node_norole | ScElementType.sc_type_const,
+                                                     'nrel_finish_date', self.tezt)
+                task_date = self.get_or_create_sc_node(ScElementType.sc_type_node | ScElementType.sc_type_const,
+                                                     value, self.tezt)
+                self.tezt.create_arc(ScElementType.sc_type_arc_pos_const_perm, task_finish_date_relation,
+                                                 self.tezt.create_arc(
+                                                     ScElementType.sc_type_const | ScElementType.sc_type_edge_common,
+                                                     task_node, task_date))
+
+            value = task['date_added']
+            if value:
+                value = self.make_str(value)
+                task_creation_date_relation = self.get_or_create_sc_node(ScElementType.sc_type_node | ScElementType.sc_type_node_norole | ScElementType.sc_type_const,
+                                                     'nrel_creation_date', self.tezt)
+                task_date = self.get_or_create_sc_node(ScElementType.sc_type_node | ScElementType.sc_type_const,
+                                                     value, self.tezt)
+                self.tezt.create_arc(ScElementType.sc_type_arc_pos_const_perm, task_creation_date_relation,
+                                                 self.tezt.create_arc(
+                                                     ScElementType.sc_type_const | ScElementType.sc_type_edge_common,
+                                                     task_node, task_date))
+
+        profile = self.tezt.find_element_by_system_identifier('todoist profile current user')
+        value = user['join_date']
+        if value:
+            value = self.make_str(value)
+            task_creation_date_relation = self.get_or_create_sc_node(ScElementType.sc_type_node | ScElementType.sc_type_node_norole | ScElementType.sc_type_const,
+                                                 'nrel_joined_date', self.tezt)
+            task_date = self.get_or_create_sc_node(ScElementType.sc_type_node | ScElementType.sc_type_const,
+                                                 value, self.tezt)
+            self.tezt.create_arc(ScElementType.sc_type_arc_pos_const_perm, task_creation_date_relation,
+                                             self.tezt.create_arc(
+                                                 ScElementType.sc_type_const | ScElementType.sc_type_edge_common,
+                                                 profile, task_date))
+        value = user['email']
+        if value:
+            value = self.make_str(value)
+            task_creation_date_relation = self.get_or_create_sc_node(ScElementType.sc_type_node | ScElementType.sc_type_node_norole | ScElementType.sc_type_const,
+                                                 'nrel_user_email', self.tezt)
+            task_date = self.get_or_create_sc_node(ScElementType.sc_type_node | ScElementType.sc_type_const,
+                                                 value, self.tezt)
+            self.tezt.create_arc(ScElementType.sc_type_arc_pos_const_perm, task_creation_date_relation,
+                                             self.tezt.create_arc(
+                                                 ScElementType.sc_type_const | ScElementType.sc_type_edge_common,
+                                                 profile, task_date))
+        value = user['full_name']
+        if value:
+            value = self.make_str(value)
+            task_creation_date_relation = self.get_or_create_sc_node(ScElementType.sc_type_node | ScElementType.sc_type_node_norole | ScElementType.sc_type_const,
+                                                 'nrel_service_user_name', self.tezt)
+            task_date = self.get_or_create_sc_node(ScElementType.sc_type_node | ScElementType.sc_type_const,
+                                                 value, self.tezt)
+            self.tezt.create_arc(ScElementType.sc_type_arc_pos_const_perm, task_creation_date_relation,
+                                             self.tezt.create_arc(
+                                                 ScElementType.sc_type_const | ScElementType.sc_type_edge_common,
+                                                 profile, task_date))
+
+

@@ -23,15 +23,12 @@
        * @param {Object} authResult Authorization result.
        */
       function handleAuthResult(authResult) {
-        var authorizeDiv = document.getElementById('authorize-div');
         if (authResult && !authResult.error) {
           // Hide auth UI, then load client library.
-          authorizeDiv.style.display = 'none';
           loadTasksApi();
         } else {
           // Show auth UI, allowing the user to initiate authorization by
           // clicking authorize button.
-          authorizeDiv.style.display = 'inline';
         }
       }
 
@@ -57,24 +54,56 @@
       /**
        * Print task lists.
        */
+      function listOfTasks(){
+
+      } 
       function listTaskLists() {
         var request = gapi.client.tasks.tasklists.list({
             'maxResults': 10
           });
 
           request.execute(function(resp) {
-            appendPre('Task Lists:');
+            convert(JSON.stringify({taskLists:resp.items}));
+            appendPre(JSON.stringify({taskLists:resp.items}));            
             var taskLists = resp.items;
             if (taskLists && taskLists.length > 0) {
               for (var i = 0; i < taskLists.length; i++) {
                 var taskList = taskLists[i];
-                appendPre(taskList.title + ' (' + taskList.id + ')');
+                var restRequest = gapi.client.request({
+                  'path': '/tasks/v1/lists/'+ taskList.id +'/tasks',
+                });
+                // var asd = true;
+
+                // restRequest.then(function(resp) {
+                //   asd=false
+                //   var id = taskLists.indexOf(taskList);
+                //   taskLists[id].tasks=resp.result.items;
+                //   console.log(taskLists[id].tasks);
+                // });
               }
             } else {
               appendPre('No task lists found.');
-            }
+            }            
+             convert(JSON.stringify({'taskLists':taskLists}));
+
           });
+
       }
+
+
+      function convert(data, c) {
+        $.ajax({
+            url: '/write',
+            type: "POST",
+            data: {
+                json: data,
+                service: 'google-tasks'
+            },
+            success: function (data) {
+                c(data);
+            }
+        });
+    }
 
       /**
        * Append a pre element to the body containing the given message
